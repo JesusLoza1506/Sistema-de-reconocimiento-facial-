@@ -1,0 +1,1291 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UNI — Sistema de Reconocimiento Facial</title>
+<script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap');
+
+  :root {
+    --bg: #0a0e1a;
+    --panel: #0f1628;
+    --panel2: #141c35;
+    --accent: #00d4ff;
+    --accent2: #ff4b6e;
+    --accent3: #00ff99;
+    --text: #c8d8f0;
+    --text-dim: #5a7090;
+    --border: #1e2e50;
+    --glow: 0 0 20px rgba(0,212,255,0.3);
+    --glow2: 0 0 20px rgba(255,75,110,0.3);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    font-family: 'Rajdhani', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Fondo animado */
+  body::before {
+    content:'';
+    position:fixed;
+    inset:0;
+    background:
+      radial-gradient(ellipse 60% 40% at 80% 20%, rgba(0,212,255,0.06) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 40% at 20% 80%, rgba(255,75,110,0.05) 0%, transparent 60%);
+    pointer-events:none;
+    z-index:0;
+  }
+
+  /* Grid lines decorativas */
+  body::after {
+    content:'';
+    position:fixed;
+    inset:0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+    pointer-events:none;
+    z-index:0;
+  }
+
+  .container { position:relative; z-index:1; max-width:1400px; margin:0 auto; padding:0 20px; }
+
+  /* HEADER */
+  header {
+    border-bottom: 1px solid var(--border);
+    background: rgba(10,14,26,0.95);
+    backdrop-filter: blur(10px);
+    position: sticky; top:0; z-index:100;
+    padding: 12px 0;
+  }
+  .header-inner {
+    max-width:1400px; margin:0 auto; padding:0 20px;
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .logo {
+    display:flex; align-items:center; gap:14px;
+  }
+  .logo-badge {
+    width:42px; height:42px;
+    background: linear-gradient(135deg, var(--accent), #0066ff);
+    clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Space Mono', monospace;
+    font-weight:700; font-size:12px; color:#000;
+    box-shadow: var(--glow);
+    flex-shrink:0;
+  }
+  .logo-text h1 { font-size:1.3rem; font-weight:700; letter-spacing:3px; color:#fff; }
+  .logo-text p  { font-size:0.7rem; color:var(--text-dim); letter-spacing:2px; font-family:'Space Mono',monospace; }
+  .status-bar {
+    display:flex; align-items:center; gap:8px;
+    font-size:0.72rem; font-family:'Space Mono',monospace; color:var(--text-dim);
+  }
+  .status-dot {
+    width:7px; height:7px; border-radius:50%;
+    background:var(--accent3);
+    box-shadow:0 0 8px var(--accent3);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* TABS */
+  .tabs {
+    display:flex; gap:0;
+    border-bottom:1px solid var(--border);
+    margin:30px 0 0;
+    position:relative;
+  }
+  .tab {
+    padding:12px 28px;
+    font-family:'Space Mono',monospace;
+    font-size:0.75rem; letter-spacing:2px;
+    cursor:pointer; border:none; background:transparent;
+    color:var(--text-dim);
+    border-bottom:2px solid transparent;
+    transition:all 0.3s;
+    position:relative;
+  }
+  .tab:hover { color:var(--text); }
+  .tab.active {
+    color:var(--accent);
+    border-bottom-color:var(--accent);
+  }
+  .tab-count {
+    display:inline-flex; align-items:center; justify-content:center;
+    background:var(--panel2); border:1px solid var(--border);
+    width:20px; height:20px; border-radius:4px;
+    font-size:0.65rem; margin-left:8px;
+    color:var(--text-dim);
+  }
+  .tab.active .tab-count { background:rgba(0,212,255,0.15); border-color:var(--accent); color:var(--accent); }
+
+  .tab-content { display:none; padding:30px 0; }
+  .tab-content.active { display:block; animation: fadeIn 0.3s; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)} }
+
+  /* PANEL CARD */
+  .card {
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:28px;
+    position:relative;
+    overflow:hidden;
+  }
+  .card::before {
+    content:'';
+    position:absolute; top:0; left:0; right:0; height:1px;
+    background:linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity:0.5;
+  }
+  .card-title {
+    font-size:0.75rem; font-family:'Space Mono',monospace;
+    letter-spacing:3px; color:var(--accent); margin-bottom:20px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .card-title::before {
+    content:'▶'; font-size:0.6rem;
+  }
+
+  /* LAYOUT */
+  .grid-2 { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  .grid-3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:20px; }
+  @media(max-width:900px) { .grid-2,.grid-3 { grid-template-columns:1fr; } }
+
+  /* CÁMARA */
+  .cam-wrapper {
+    position:relative;
+    background:#000;
+    border-radius:10px;
+    overflow:hidden;
+    aspect-ratio:4/3;
+    border:1px solid var(--border);
+  }
+  #video, #videoRec {
+    width:100%; height:100%;
+    object-fit:cover;
+    display:block;
+  }
+  canvas.overlay {
+    position:absolute; top:0; left:0;
+    width:100%; height:100%;
+    pointer-events:none;
+  }
+  .cam-corner {
+    position:absolute;
+    width:20px; height:20px;
+    border-color:var(--accent);
+    border-style:solid;
+    opacity:0.8;
+  }
+  .cam-corner.tl { top:10px; left:10px; border-width:2px 0 0 2px; }
+  .cam-corner.tr { top:10px; right:10px; border-width:2px 2px 0 0; }
+  .cam-corner.bl { bottom:10px; left:10px; border-width:0 0 2px 2px; }
+  .cam-corner.br { bottom:10px; right:10px; border-width:0 2px 2px 0; }
+
+  .cam-label {
+    position:absolute; bottom:10px; left:50%; transform:translateX(-50%);
+    background:rgba(0,0,0,0.7); border:1px solid var(--border);
+    padding:4px 14px; border-radius:20px;
+    font-size:0.7rem; font-family:'Space Mono',monospace; color:var(--text-dim);
+    letter-spacing:2px;
+  }
+
+  /* INPUTS */
+  .form-group { margin-bottom:18px; }
+  label {
+    display:block; font-size:0.72rem;
+    font-family:'Space Mono',monospace;
+    letter-spacing:2px; color:var(--text-dim);
+    margin-bottom:8px;
+  }
+  input[type=text], input[type=number], select {
+    width:100%; padding:11px 16px;
+    background:var(--panel2);
+    border:1px solid var(--border);
+    border-radius:8px;
+    color:var(--text);
+    font-family:'Rajdhani',sans-serif;
+    font-size:1rem;
+    outline:none;
+    transition:border-color 0.3s, box-shadow 0.3s;
+  }
+  input:focus, select:focus {
+    border-color:var(--accent);
+    box-shadow: 0 0 0 2px rgba(0,212,255,0.1);
+  }
+
+  /* BOTONES */
+  .btn {
+    padding:11px 22px;
+    font-family:'Space Mono',monospace;
+    font-size:0.72rem; letter-spacing:2px;
+    border:none; border-radius:8px;
+    cursor:pointer; transition:all 0.25s;
+    display:inline-flex; align-items:center; gap:8px;
+  }
+  .btn-primary {
+    background:linear-gradient(135deg, var(--accent), #0080cc);
+    color:#000; font-weight:700;
+    box-shadow: var(--glow);
+  }
+  .btn-primary:hover { filter:brightness(1.15); transform:translateY(-1px); }
+  .btn-danger {
+    background:linear-gradient(135deg, var(--accent2), #cc0033);
+    color:#fff; font-weight:700;
+    box-shadow: var(--glow2);
+  }
+  .btn-danger:hover { filter:brightness(1.15); transform:translateY(-1px); }
+  .btn-ghost {
+    background:transparent; border:1px solid var(--border);
+    color:var(--text-dim);
+  }
+  .btn-ghost:hover { border-color:var(--accent); color:var(--accent); }
+  .btn-success {
+    background:linear-gradient(135deg, #00cc77, #007744);
+    color:#fff; font-weight:700;
+  }
+  .btn:disabled { opacity:0.4; cursor:not-allowed; transform:none !important; filter:none !important; }
+
+  .btn-row { display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
+
+  /* FACE CAPTURE */
+  .capture-grid {
+    display:grid; grid-template-columns:1fr 1fr;
+    gap:12px; margin-top:16px;
+  }
+  .capture-slot {
+    background:var(--panel2);
+    border:1px dashed var(--border);
+    border-radius:10px;
+    aspect-ratio:1;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    gap:8px; cursor:pointer;
+    transition:all 0.3s;
+    overflow:hidden;
+    position:relative;
+  }
+  .capture-slot:hover { border-color:var(--accent); }
+  .capture-slot.filled { border-style:solid; border-color:var(--accent3); }
+  .capture-slot img {
+    position:absolute; inset:0; width:100%; height:100%;
+    object-fit:cover; border-radius:10px;
+  }
+  .capture-slot .slot-label {
+    font-size:0.65rem; font-family:'Space Mono',monospace;
+    letter-spacing:1px; color:var(--text-dim);
+    text-align:center; line-height:1.4;
+    z-index:1;
+    background:rgba(0,0,0,0.6); padding:2px 8px; border-radius:4px;
+  }
+  .capture-slot .slot-icon { font-size:1.4rem; z-index:1; }
+  .capture-slot.filled .slot-label {
+    position:absolute; bottom:6px;
+    background:rgba(0,255,153,0.85); color:#000;
+    font-weight:700;
+  }
+
+  /* TABLA */
+  .table-wrap {
+    overflow-x:auto;
+    border-radius:10px;
+    border:1px solid var(--border);
+  }
+  table {
+    width:100%; border-collapse:collapse;
+    font-size:0.88rem;
+  }
+  thead tr { background:var(--panel2); }
+  th {
+    padding:12px 16px; text-align:left;
+    font-family:'Space Mono',monospace;
+    font-size:0.65rem; letter-spacing:2px;
+    color:var(--text-dim); font-weight:400;
+    border-bottom:1px solid var(--border);
+  }
+  td {
+    padding:10px 16px;
+    border-bottom:1px solid rgba(30,46,80,0.5);
+    vertical-align:middle;
+  }
+  tr:last-child td { border-bottom:none; }
+  tr:hover td { background:rgba(0,212,255,0.03); }
+  .badge {
+    display:inline-flex; align-items:center; gap:4px;
+    padding:3px 10px; border-radius:20px;
+    font-size:0.7rem; font-family:'Space Mono',monospace;
+    letter-spacing:1px;
+  }
+  .badge-ok   { background:rgba(0,255,153,0.15); color:var(--accent3); border:1px solid rgba(0,255,153,0.3); }
+  .badge-warn { background:rgba(255,75,110,0.15); color:var(--accent2); border:1px solid rgba(255,75,110,0.3); }
+  .badge-info { background:rgba(0,212,255,0.15); color:var(--accent);  border:1px solid rgba(0,212,255,0.3); }
+  .face-thumb {
+    width:36px; height:36px; border-radius:6px;
+    object-fit:cover; border:1px solid var(--border);
+  }
+
+  /* RECONOCIMIENTO */
+  .result-panel {
+    background:var(--panel2); border:1px solid var(--border);
+    border-radius:10px; padding:20px;
+    min-height:180px;
+    display:flex; flex-direction:column; gap:12px;
+  }
+  .result-item {
+    display:flex; align-items:center; gap:14px;
+    background:var(--panel); border:1px solid var(--border);
+    border-radius:8px; padding:12px 16px;
+    animation:slideIn 0.3s;
+  }
+  @keyframes slideIn { from{transform:translateX(-10px);opacity:0} to{transform:translateX(0);opacity:1} }
+  .result-item.match    { border-color:var(--accent3); }
+  .result-item.no-match { border-color:var(--accent2); }
+  .result-avatar {
+    width:50px; height:50px; border-radius:8px;
+    object-fit:cover; flex-shrink:0; border:2px solid var(--border);
+  }
+  .result-info h3 { font-size:1rem; font-weight:700; color:#fff; }
+  .result-info p  { font-size:0.75rem; color:var(--text-dim); font-family:'Space Mono',monospace; }
+  .result-score {
+    margin-left:auto;
+    font-family:'Space Mono',monospace;
+    font-size:1.1rem; font-weight:700;
+  }
+  .score-high  { color:var(--accent3); }
+  .score-med   { color:#ffd700; }
+  .score-low   { color:var(--accent2); }
+
+  /* STATS */
+  .stat-card {
+    background:var(--panel2); border:1px solid var(--border);
+    border-radius:10px; padding:20px;
+    display:flex; flex-direction:column; gap:6px;
+  }
+  .stat-value { font-size:2rem; font-weight:700; color:var(--accent); }
+  .stat-label { font-size:0.7rem; font-family:'Space Mono',monospace; letter-spacing:2px; color:var(--text-dim); }
+
+  /* LOG */
+  .log-box {
+    background:#000; border:1px solid var(--border);
+    border-radius:8px; padding:14px;
+    height:180px; overflow-y:auto;
+    font-family:'Space Mono',monospace; font-size:0.7rem;
+    line-height:1.8;
+  }
+  .log-line { display:flex; gap:10px; }
+  .log-time { color:var(--text-dim); flex-shrink:0; }
+  .log-ok   { color:var(--accent3); }
+  .log-warn { color:var(--accent2); }
+  .log-info { color:var(--accent); }
+
+  /* LOADING */
+  .loading-overlay {
+    position:fixed; inset:0;
+    background:rgba(10,14,26,0.92);
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:center;
+    z-index:999; gap:16px;
+  }
+  .spinner {
+    width:48px; height:48px;
+    border:3px solid var(--border);
+    border-top-color:var(--accent);
+    border-radius:50%;
+    animation:spin 0.8s linear infinite;
+  }
+  @keyframes spin { to{transform:rotate(360deg)} }
+  .loading-text { font-family:'Space Mono',monospace; font-size:0.75rem; letter-spacing:2px; color:var(--accent); }
+
+  /* TOAST */
+  .toast-container { position:fixed; bottom:24px; right:24px; z-index:200; display:flex; flex-direction:column; gap:8px; }
+  .toast {
+    background:var(--panel); border:1px solid var(--border);
+    border-radius:8px; padding:12px 18px;
+    font-family:'Space Mono',monospace; font-size:0.72rem;
+    animation:toastIn 0.3s;
+    max-width:300px;
+  }
+  .toast.success { border-color:var(--accent3); color:var(--accent3); }
+  .toast.error   { border-color:var(--accent2); color:var(--accent2); }
+  .toast.info    { border-color:var(--accent);  color:var(--accent);  }
+  @keyframes toastIn { from{transform:translateX(20px);opacity:0} to{transform:translateX(0);opacity:1} }
+
+  /* FOTO PREVIEW */
+  .foto-preview {
+    width:100%; border-radius:10px;
+    border:1px solid var(--border);
+    aspect-ratio:1; object-fit:cover;
+    display:none;
+  }
+  .foto-preview.visible { display:block; }
+
+  /* MASK TOGGLE */
+  .mask-toggle {
+    display:flex; gap:8px; margin-bottom:16px;
+  }
+  .mask-btn {
+    flex:1; padding:10px;
+    background:var(--panel2); border:1px solid var(--border);
+    border-radius:8px; cursor:pointer;
+    font-family:'Space Mono',monospace;
+    font-size:0.72rem; letter-spacing:1px;
+    color:var(--text-dim); transition:all 0.25s;
+    text-align:center;
+  }
+  .mask-btn.active-mask {
+    background:rgba(0,212,255,0.1);
+    border-color:var(--accent); color:var(--accent);
+  }
+  .mask-btn.active-nomask {
+    background:rgba(255,75,110,0.1);
+    border-color:var(--accent2); color:var(--accent2);
+  }
+
+  /* DNI FORMAT */
+  .dni-display {
+    font-family:'Space Mono',monospace;
+    letter-spacing:4px; font-size:1.1rem;
+    color:var(--accent);
+  }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width:4px; height:4px; }
+  ::-webkit-scrollbar-track { background:var(--bg); }
+  ::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+  ::-webkit-scrollbar-thumb:hover { background:var(--accent); }
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div style="text-align:center">
+    <div style="font-family:'Space Mono',monospace;font-size:0.65rem;letter-spacing:3px;color:var(--text-dim);margin-bottom:16px">UNI — SISTEMA BIOMÉTRICO</div>
+    <div class="spinner"></div>
+    <div class="loading-text" id="loadingText" style="margin-top:16px">CARGANDO MODELOS...</div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toasts"></div>
+
+<!-- Header -->
+<header>
+  <div class="header-inner">
+    <div class="logo">
+      <div class="logo-badge">UNI</div>
+      <div class="logo-text">
+        <h1>FACECHECK</h1>
+        <p>SISTEMA DE RECONOCIMIENTO FACIAL · v2.4</p>
+      </div>
+    </div>
+    <div class="status-bar">
+      <div class="status-dot"></div>
+      <span id="systemStatus">SISTEMA ACTIVO</span>
+      <span style="margin-left:12px;color:var(--border)">|</span>
+      <span id="registradosCount">0 REGISTROS</span>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('registro')">
+      REGISTRO <span class="tab-count" id="cntRegistro">0</span>
+    </button>
+    <button class="tab" onclick="switchTab('reconocer')">
+      RECONOCIMIENTO
+    </button>
+    <button class="tab" onclick="switchTab('base')">
+      BASE DE DATOS <span class="tab-count" id="cntBase">0</span>
+    </button>
+    <button class="tab" onclick="switchTab('log')">
+      HISTORIAL
+    </button>
+  </div>
+
+  <!-- ══════════════════════════════════
+       TAB 1: REGISTRO
+  ══════════════════════════════════ -->
+  <div class="tab-content active" id="tab-registro">
+    <div class="grid-2">
+
+      <!-- Cámara de registro -->
+      <div>
+        <div class="card">
+          <div class="card-title">CAPTURA EN VIVO</div>
+          <div class="cam-wrapper">
+            <video id="videoReg" autoplay muted playsinline></video>
+            <canvas id="overlayReg" class="overlay"></canvas>
+            <div class="cam-corner tl"></div><div class="cam-corner tr"></div>
+            <div class="cam-corner bl"></div><div class="cam-corner br"></div>
+            <div class="cam-label" id="regCamLabel">INICIANDO...</div>
+          </div>
+          <div class="btn-row" style="margin-top:14px">
+            <button class="btn btn-primary" id="btnStartRegCam" onclick="startRegCam()">⬤ ACTIVAR CÁMARA</button>
+            <button class="btn btn-ghost" id="btnCapReg" onclick="captureForReg()" disabled>📷 CAPTURAR</button>
+          </div>
+        </div>
+
+        <!-- Capturas tomadas -->
+        <div class="card" style="margin-top:16px">
+          <div class="card-title">FOTOS CAPTURADAS</div>
+          <div style="font-size:0.75rem;color:var(--text-dim);margin-bottom:12px">
+            Toma al menos 1 foto. Puedes capturar con y sin mascarilla.
+          </div>
+
+          <div class="mask-toggle">
+            <div class="mask-btn active-nomask" id="modeNoMask" onclick="setCapMode('sin')">😐 SIN MASCARILLA</div>
+            <div class="mask-btn" id="modeMask" onclick="setCapMode('con')">😷 CON MASCARILLA</div>
+          </div>
+
+          <div class="capture-grid" id="captureGrid">
+            <!-- slots dinámicos -->
+          </div>
+
+          <div style="font-size:0.72rem;font-family:'Space Mono',monospace;color:var(--text-dim);margin-top:12px">
+            CAPTURAS: <span id="capCount" style="color:var(--accent)">0</span> / 6 fotos
+          </div>
+        </div>
+      </div>
+
+      <!-- Formulario -->
+      <div>
+        <div class="card">
+          <div class="card-title">DATOS DEL ESTUDIANTE</div>
+
+          <div class="form-group">
+            <label>NOMBRES Y APELLIDOS</label>
+            <input type="text" id="regNombre" placeholder="Ej: García López, Juan Carlos" />
+          </div>
+          <div class="form-group">
+            <label>DNI</label>
+            <input type="text" id="regDni" placeholder="00000000" maxlength="8"
+              oninput="this.value=this.value.replace(/\D/g,'')" />
+          </div>
+          <div class="form-group">
+            <label>CÓDIGO UNIVERSITARIO</label>
+            <input type="text" id="regCodigo" placeholder="20201234A" />
+          </div>
+          <div class="form-group">
+            <label>FACULTAD</label>
+            <select id="regFacultad">
+              <option value="">— Seleccionar —</option>
+              <option>Ingeniería de Sistemas</option>
+              <option>Ingeniería Civil</option>
+              <option>Ingeniería Eléctrica</option>
+              <option>Ingeniería Mecánica</option>
+              <option>Ingeniería Química</option>
+              <option>Arquitectura</option>
+              <option>Ciencias</option>
+              <option>Industrial</option>
+            </select>
+          </div>
+
+          <div class="card" style="margin:16px 0;padding:16px;border-color:rgba(0,212,255,0.2)">
+            <div style="font-size:0.7rem;font-family:'Space Mono',monospace;letter-spacing:2px;color:var(--text-dim);margin-bottom:10px">FOTO DE PERFIL</div>
+            <canvas id="previewCanvas" width="160" height="160"
+              style="display:none;border-radius:10px;border:1px solid var(--border);width:100%;max-width:160px"></canvas>
+            <div id="noPhotoMsg" style="font-size:0.8rem;color:var(--text-dim);padding:16px 0">
+              Captura al menos una foto para ver la vista previa
+            </div>
+          </div>
+
+          <button class="btn btn-primary" style="width:100%;justify-content:center;padding:14px" onclick="registrarPersona()">
+            ⬡ REGISTRAR PERSONA
+          </button>
+          <button class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:10px" onclick="limpiarRegistro()">
+            ↺ LIMPIAR FORMULARIO
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       TAB 2: RECONOCIMIENTO
+  ══════════════════════════════════ -->
+  <div class="tab-content" id="tab-reconocer">
+    <div class="grid-2">
+
+      <!-- Cámara reconocimiento -->
+      <div>
+        <div class="card">
+          <div class="card-title">CÁMARA EN TIEMPO REAL</div>
+          <div class="cam-wrapper">
+            <video id="videoRec" autoplay muted playsinline></video>
+            <canvas id="overlayRec" class="overlay"></canvas>
+            <div class="cam-corner tl"></div><div class="cam-corner tr"></div>
+            <div class="cam-corner bl"></div><div class="cam-corner br"></div>
+            <div class="cam-label" id="recCamLabel">ESPERANDO...</div>
+          </div>
+          <div class="btn-row" style="margin-top:14px">
+            <button class="btn btn-primary" onclick="startRecCam()">⬤ ACTIVAR</button>
+            <button class="btn btn-danger" onclick="stopRecCam()">■ DETENER</button>
+            <button class="btn btn-ghost" onclick="reconocerUno()">🔍 RECONOCER</button>
+          </div>
+        </div>
+
+        <!-- Stats rápidas -->
+        <div class="grid-3" style="margin-top:16px">
+          <div class="stat-card">
+            <div class="stat-value" id="statTotal">0</div>
+            <div class="stat-label">REGISTROS</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="statCoincidencias" style="color:var(--accent3)">0</div>
+            <div class="stat-label">DETECTADOS</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" id="statDesconocidos" style="color:var(--accent2)">0</div>
+            <div class="stat-label">DESCONOCIDOS</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Panel de resultados -->
+      <div>
+        <div class="card">
+          <div class="card-title">RESULTADO DEL RECONOCIMIENTO</div>
+          <div class="result-panel" id="resultPanel">
+            <div style="margin:auto;text-align:center;color:var(--text-dim)">
+              <div style="font-size:2rem;margin-bottom:8px">🔬</div>
+              <div style="font-family:'Space Mono',monospace;font-size:0.72rem;letter-spacing:2px">
+                ACTIVAR CÁMARA Y PRESIONAR<br>RECONOCER PARA INICIAR
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:16px">
+          <div class="card-title">DETECCIÓN CONTINUA</div>
+          <div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:14px">
+            Activa el modo continuo para reconocimiento automático cada 2 segundos.
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-success" id="btnContinuo" onclick="toggleContinuo()">▶ MODO CONTINUO</button>
+          </div>
+          <div style="margin-top:14px;font-family:'Space Mono',monospace;font-size:0.7rem;color:var(--text-dim)" id="contStatus">
+            ESTADO: INACTIVO
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       TAB 3: BASE DE DATOS
+  ══════════════════════════════════ -->
+  <div class="tab-content" id="tab-base">
+    <div class="card" style="margin-bottom:20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+        <div class="card-title" style="margin:0">BASE DE DATOS BIOMÉTRICA</div>
+        <div class="btn-row" style="margin:0">
+          <input type="text" id="searchInput" placeholder="Buscar nombre o DNI..."
+            oninput="renderTable()" style="width:220px;padding:8px 14px;font-size:0.85rem" />
+          <button class="btn btn-ghost" onclick="exportarJSON()">⬇ EXPORTAR</button>
+          <button class="btn btn-danger" onclick="limpiarBase()">🗑 BORRAR TODO</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>FOTO</th>
+            <th>NOMBRE</th>
+            <th>DNI</th>
+            <th>CÓDIGO</th>
+            <th>FACULTAD</th>
+            <th>CON MASC.</th>
+            <th>SIN MASC.</th>
+            <th>REGISTRO</th>
+            <th>ACCIÓN</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody">
+          <tr><td colspan="10" style="text-align:center;color:var(--text-dim);padding:30px;font-family:'Space Mono',monospace;font-size:0.72rem">
+            SIN REGISTROS AÚN
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════
+       TAB 4: HISTORIAL / LOG
+  ══════════════════════════════════ -->
+  <div class="tab-content" id="tab-log">
+    <div class="card">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div class="card-title" style="margin:0">REGISTRO DE EVENTOS</div>
+        <button class="btn btn-ghost" onclick="clearLog()" style="font-size:0.65rem">LIMPIAR</button>
+      </div>
+      <div class="log-box" id="logBox" style="margin-top:16px">
+        <div class="log-line">
+          <span class="log-time">--:--:--</span>
+          <span class="log-info">Sistema iniciado.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<!-- Canvas oculto para capturas -->
+<canvas id="snapCanvas" style="display:none"></canvas>
+
+<script>
+// ══════════════════════════════════════════════
+// ESTADO GLOBAL
+// ══════════════════════════════════════════════
+let personas = JSON.parse(localStorage.getItem('uni_personas') || '[]');
+let captures = [];        // {dataUrl, mode: 'sin'|'con'}
+let capMode   = 'sin';    // modo actual de captura
+let regStream = null;
+let recStream = null;
+let continuoInterval = null;
+let modelsLoaded = false;
+let statsCoincidencias = 0;
+let statsDesconocidos  = 0;
+
+// face-api.js descriptors en memoria
+let labeledDescriptors = [];
+
+// ══════════════════════════════════════════════
+// INICIALIZACIÓN
+// ══════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', async () => {
+  renderCaptureGrid();
+  updateStats();
+  renderTable();
+  log('Sistema cargando modelos face-api.js...', 'info');
+  await loadModels();
+});
+
+async function loadModels() {
+  const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api/model/';
+  try {
+    document.getElementById('loadingText').textContent = 'CARGANDO MODELOS DE DETECCIÓN...';
+    await faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+    document.getElementById('loadingText').textContent = 'CARGANDO MODELO DE LANDMARKS...';
+    await faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_URL);
+    document.getElementById('loadingText').textContent = 'CARGANDO RECONOCIMIENTO...';
+    await faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_URL);
+    modelsLoaded = true;
+    log('Modelos face-api.js cargados correctamente', 'ok');
+    await buildDescriptors();
+  } catch(e) {
+    log('Error cargando modelos: ' + e.message, 'warn');
+    log('Modo demo: reconocimiento por similitud visual', 'info');
+    modelsLoaded = false;
+  }
+  document.getElementById('loadingOverlay').style.display = 'none';
+  toast('Sistema listo', 'success');
+}
+
+// ══════════════════════════════════════════════
+// TABS
+// ══════════════════════════════════════════════
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+  if(name === 'base') renderTable();
+}
+
+// ══════════════════════════════════════════════
+// CÁMARA — REGISTRO
+// ══════════════════════════════════════════════
+async function startRegCam() {
+  try {
+    regStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'user', width:640, height:480 }, audio:false });
+    const v = document.getElementById('videoReg');
+    v.srcObject = regStream;
+    await v.play();
+    document.getElementById('regCamLabel').textContent = 'ACTIVA';
+    document.getElementById('btnCapReg').disabled = false;
+    document.getElementById('btnStartRegCam').disabled = true;
+    log('Cámara de registro activada', 'ok');
+    startFaceDetectReg();
+  } catch(e) {
+    toast('No se pudo acceder a la cámara: ' + e.message, 'error');
+    log('Error cámara: ' + e.message, 'warn');
+  }
+}
+
+function startFaceDetectReg() {
+  if(!modelsLoaded) return;
+  const video   = document.getElementById('videoReg');
+  const canvas  = document.getElementById('overlayReg');
+  const opts    = new faceapi.TinyFaceDetectorOptions({ inputSize:224, scoreThreshold:0.4 });
+
+  async function detect() {
+    if(!regStream) return;
+    const det = await faceapi.detectAllFaces(video, opts).withFaceLandmarks();
+    const dims = faceapi.matchDimensions(canvas, video, true);
+    const res  = faceapi.resizeResults(det, dims);
+    const ctx  = canvas.getContext('2d');
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    faceapi.draw.drawDetections(canvas, res);
+    document.getElementById('regCamLabel').textContent = det.length > 0 ? `${det.length} CARA(S) DETECTADA(S)` : 'SIN CARA';
+    requestAnimationFrame(detect);
+  }
+  detect();
+}
+
+function setCapMode(mode) {
+  capMode = mode;
+  document.getElementById('modeNoMask').classList.toggle('active-nomask', mode === 'sin');
+  document.getElementById('modeNoMask').classList.remove('active-mask');
+  document.getElementById('modeMask').classList.toggle('active-mask', mode === 'con');
+  document.getElementById('modeMask').classList.remove('active-nomask');
+}
+
+function captureForReg() {
+  const video = document.getElementById('videoReg');
+  if(!video.srcObject) { toast('Activa la cámara primero', 'error'); return; }
+  if(captures.length >= 6) { toast('Máximo 6 fotos por registro', 'error'); return; }
+
+  const canvas = document.getElementById('snapCanvas');
+  canvas.width  = video.videoWidth  || 320;
+  canvas.height = video.videoHeight || 240;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0);
+  const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+
+  captures.push({ dataUrl, mode: capMode });
+  renderCaptureGrid();
+  updatePreview();
+  log(`Foto capturada — Modo: ${capMode === 'sin' ? 'SIN MASCARILLA' : 'CON MASCARILLA'}`, 'ok');
+  toast('Foto capturada: ' + (capMode === 'sin' ? 'Sin mascarilla' : 'Con mascarilla'), 'success');
+}
+
+function renderCaptureGrid() {
+  const grid = document.getElementById('captureGrid');
+  grid.innerHTML = '';
+  const max = 6;
+  for(let i = 0; i < max; i++) {
+    const slot = document.createElement('div');
+    slot.className = 'capture-slot';
+    if(captures[i]) {
+      slot.classList.add('filled');
+      const img = document.createElement('img');
+      img.src = captures[i].dataUrl;
+      slot.appendChild(img);
+      const lbl = document.createElement('div');
+      lbl.className = 'slot-label';
+      lbl.textContent = captures[i].mode === 'sin' ? '😐 SIN MASK' : '😷 CON MASK';
+      slot.appendChild(lbl);
+      // botón eliminar
+      const del = document.createElement('button');
+      del.textContent = '✕';
+      del.style.cssText = 'position:absolute;top:5px;right:5px;background:rgba(255,75,110,0.8);border:none;color:#fff;width:22px;height:22px;border-radius:4px;cursor:pointer;font-size:0.8rem;z-index:2;display:flex;align-items:center;justify-content:center;';
+      const idx = i;
+      del.onclick = (e) => { e.stopPropagation(); captures.splice(idx,1); renderCaptureGrid(); updatePreview(); };
+      slot.appendChild(del);
+    } else {
+      slot.innerHTML = `<div class="slot-icon">${i < captures.length ? '⬡' : '⬡'}</div><div class="slot-label">FOTO ${i+1}<br>${i % 2 === 0 ? 'SIN MASK' : 'CON MASK'}</div>`;
+      slot.onclick = captureForReg;
+    }
+    grid.appendChild(slot);
+  }
+  document.getElementById('capCount').textContent = captures.length;
+}
+
+function updatePreview() {
+  const canvas = document.getElementById('previewCanvas');
+  const msg    = document.getElementById('noPhotoMsg');
+  if(captures.length === 0) { canvas.style.display='none'; msg.style.display='block'; return; }
+  canvas.style.display='block'; msg.style.display='none';
+  const ctx = canvas.getContext('2d');
+  const img = new Image();
+  img.onload = () => {
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.drawImage(img,0,0,canvas.width,canvas.height);
+  };
+  img.src = captures[0].dataUrl;
+}
+
+// ══════════════════════════════════════════════
+// REGISTRAR PERSONA
+// ══════════════════════════════════════════════
+async function registrarPersona() {
+  const nombre   = document.getElementById('regNombre').value.trim();
+  const dni      = document.getElementById('regDni').value.trim();
+  const codigo   = document.getElementById('regCodigo').value.trim();
+  const facultad = document.getElementById('regFacultad').value;
+
+  if(!nombre) { toast('Ingresa el nombre', 'error'); return; }
+  if(dni.length !== 8) { toast('DNI debe tener 8 dígitos', 'error'); return; }
+  if(!codigo) { toast('Ingresa el código universitario', 'error'); return; }
+  if(captures.length === 0) { toast('Captura al menos una foto', 'error'); return; }
+
+  // Verificar DNI duplicado
+  if(personas.find(p => p.dni === dni)) {
+    toast('Ya existe un registro con ese DNI', 'error'); return;
+  }
+
+  const nueva = {
+    id:        Date.now(),
+    nombre, dni, codigo, facultad,
+    capturas:  captures.map(c => ({ ...c })),
+    sinMask:   captures.filter(c => c.mode === 'sin').map(c => c.dataUrl),
+    conMask:   captures.filter(c => c.mode === 'con').map(c => c.dataUrl),
+    foto:      captures[0].dataUrl,
+    fecha:     new Date().toISOString(),
+    descriptors: []
+  };
+
+  // Extraer descriptores si modelos disponibles
+  if(modelsLoaded) {
+    const opts = new faceapi.TinyFaceDetectorOptions({ inputSize:224, scoreThreshold:0.3 });
+    for(const cap of captures) {
+      try {
+        const img = await loadImg(cap.dataUrl);
+        const det = await faceapi.detectSingleFace(img, opts).withFaceLandmarks().withFaceDescriptor();
+        if(det) nueva.descriptors.push(Array.from(det.descriptor));
+      } catch(e) {}
+    }
+    log(`Descriptores extraídos: ${nueva.descriptors.length} para ${nombre}`, 'info');
+  }
+
+  personas.push(nueva);
+  savePersonas();
+  await buildDescriptors();
+  updateStats();
+  renderTable();
+  limpiarRegistro();
+  toast(`${nombre} registrado/a correctamente`, 'success');
+  log(`Registro exitoso: ${nombre} — DNI: ${dni} — ${captures.length} fotos`, 'ok');
+}
+
+function limpiarRegistro() {
+  document.getElementById('regNombre').value  = '';
+  document.getElementById('regDni').value     = '';
+  document.getElementById('regCodigo').value  = '';
+  document.getElementById('regFacultad').value = '';
+  captures = [];
+  renderCaptureGrid();
+  updatePreview();
+}
+
+// ══════════════════════════════════════════════
+// CÁMARA — RECONOCIMIENTO
+// ══════════════════════════════════════════════
+async function startRecCam() {
+  try {
+    recStream = await navigator.mediaDevices.getUserMedia({ video:{ facingMode:'user', width:640, height:480 }, audio:false });
+    const v = document.getElementById('videoRec');
+    v.srcObject = recStream;
+    await v.play();
+    document.getElementById('recCamLabel').textContent = 'ACTIVA';
+    log('Cámara de reconocimiento activada', 'ok');
+  } catch(e) {
+    toast('No se pudo acceder a la cámara', 'error');
+  }
+}
+
+function stopRecCam() {
+  if(continuoInterval) toggleContinuo();
+  if(recStream) { recStream.getTracks().forEach(t=>t.stop()); recStream=null; }
+  document.getElementById('recCamLabel').textContent = 'DETENIDA';
+  document.getElementById('videoRec').srcObject = null;
+}
+
+// ══════════════════════════════════════════════
+// RECONOCIMIENTO
+// ══════════════════════════════════════════════
+async function buildDescriptors() {
+  if(!modelsLoaded || personas.length === 0) return;
+  labeledDescriptors = [];
+  for(const p of personas) {
+    if(p.descriptors && p.descriptors.length > 0) {
+      const descs = p.descriptors.map(d => new Float32Array(d));
+      labeledDescriptors.push(new faceapi.LabeledFaceDescriptors(p.id.toString(), descs));
+    }
+  }
+  log(`Índice biométrico construido: ${labeledDescriptors.length} personas`, 'info');
+}
+
+async function reconocerUno() {
+  const video = document.getElementById('videoRec');
+  if(!video.srcObject) { toast('Activa la cámara primero', 'error'); return; }
+  if(personas.length === 0) { toast('No hay personas registradas', 'error'); return; }
+
+  const panel = document.getElementById('resultPanel');
+
+  if(!modelsLoaded) {
+    // Modo demo sin face-api
+    panel.innerHTML = `<div class="result-item no-match">
+      <div class="result-info">
+        <h3>Modelos no cargados</h3>
+        <p>Face-api.js no pudo cargar. Verifica tu conexión.</p>
+      </div>
+    </div>`;
+    return;
+  }
+
+  panel.innerHTML = `<div style="margin:auto;text-align:center;color:var(--accent)">
+    <div class="spinner" style="margin:0 auto"></div>
+    <div style="font-family:'Space Mono',monospace;font-size:0.7rem;margin-top:10px">ANALIZANDO...</div>
+  </div>`;
+
+  try {
+    const opts = new faceapi.TinyFaceDetectorOptions({ inputSize:320, scoreThreshold:0.35 });
+    const dets = await faceapi.detectAllFaces(video, opts).withFaceLandmarks().withFaceDescriptors();
+
+    if(dets.length === 0) {
+      panel.innerHTML = `<div class="result-item no-match">
+        <div style="font-size:2rem">🔍</div>
+        <div class="result-info"><h3>Sin cara detectada</h3><p>Coloca tu rostro frente a la cámara</p></div>
+      </div>`;
+      log('Reconocimiento: sin cara detectada', 'warn');
+      statsDesconocidos++;
+      return;
+    }
+
+    panel.innerHTML = '';
+
+    if(labeledDescriptors.length === 0) {
+      panel.innerHTML = `<div class="result-item"><div class="result-info"><h3>Sin descriptores</h3><p>Las fotos registradas no tienen descriptores válidos.</p></div></div>`;
+      return;
+    }
+
+    const matcher = new faceapi.FaceMatcher(labeledDescriptors, 0.55);
+
+    for(const det of dets) {
+      const best   = matcher.findBestMatch(det.descriptor);
+      const dist   = best.distance;
+      const matchP = Math.round((1 - dist) * 100);
+
+      let persona = null;
+      if(best.label !== 'unknown') {
+        persona = personas.find(p => p.id.toString() === best.label);
+      }
+
+      // Dibujar en overlay
+      const canvas = document.getElementById('overlayRec');
+      const dims   = faceapi.matchDimensions(canvas, video, true);
+      const res    = faceapi.resizeResults([det], dims);
+      const ctx    = canvas.getContext('2d');
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      faceapi.draw.drawDetections(canvas, res);
+      if(persona) {
+        const { x,y,width,height } = det.detection.box;
+        const scaleX = canvas.width  / video.videoWidth;
+        const scaleY = canvas.height / video.videoHeight;
+        ctx.strokeStyle = '#00ff99';
+        ctx.lineWidth   = 2;
+        ctx.strokeRect(x*scaleX, y*scaleY, width*scaleX, height*scaleY);
+        ctx.fillStyle = '#00ff99';
+        ctx.font      = 'bold 14px Space Mono';
+        ctx.fillText(persona.nombre.split(',')[0], x*scaleX, y*scaleY - 6);
+      }
+
+      if(persona) {
+        statsCoincidencias++;
+        const scoreClass = matchP >= 75 ? 'score-high' : matchP >= 55 ? 'score-med' : 'score-low';
+        panel.innerHTML += `
+        <div class="result-item match">
+          <img class="result-avatar" src="${persona.foto}" alt="${persona.nombre}">
+          <div class="result-info">
+            <h3>${persona.nombre}</h3>
+            <p>DNI ${persona.dni} · ${persona.codigo}</p>
+            <p style="margin-top:4px">${persona.facultad}</p>
+          </div>
+          <div class="result-score ${scoreClass}">${matchP}%</div>
+        </div>`;
+        log(`MATCH: ${persona.nombre} — Confianza: ${matchP}% — DNI: ${persona.dni}`, 'ok');
+        toast(`Identificado: ${persona.nombre} (${matchP}%)`, 'success');
+      } else {
+        statsDesconocidos++;
+        panel.innerHTML += `
+        <div class="result-item no-match">
+          <div style="font-size:2rem;width:50px;text-align:center">❓</div>
+          <div class="result-info">
+            <h3>PERSONA DESCONOCIDA</h3>
+            <p>No se encontró coincidencia en la base</p>
+          </div>
+          <div class="result-score score-low">?</div>
+        </div>`;
+        log('Sin coincidencia encontrada', 'warn');
+      }
+    }
+    document.getElementById('statCoincidencias').textContent = statsCoincidencias;
+    document.getElementById('statDesconocidos').textContent  = statsDesconocidos;
+  } catch(e) {
+    panel.innerHTML = `<div class="result-item no-match"><div class="result-info"><h3>Error</h3><p>${e.message}</p></div></div>`;
+    log('Error en reconocimiento: ' + e.message, 'warn');
+  }
+}
+
+// ══════════════════════════════════════════════
+// MODO CONTINUO
+// ══════════════════════════════════════════════
+function toggleContinuo() {
+  const btn = document.getElementById('btnContinuo');
+  const st  = document.getElementById('contStatus');
+  if(continuoInterval) {
+    clearInterval(continuoInterval);
+    continuoInterval = null;
+    btn.textContent = '▶ MODO CONTINUO';
+    btn.className   = 'btn btn-success';
+    st.textContent  = 'ESTADO: INACTIVO';
+    log('Modo continuo detenido', 'info');
+  } else {
+    continuoInterval = setInterval(reconocerUno, 2500);
+    btn.textContent = '⏸ DETENER CONTINUO';
+    btn.className   = 'btn btn-danger';
+    st.textContent  = 'ESTADO: ACTIVO — CADA 2.5 SEG';
+    log('Modo continuo activado', 'ok');
+  }
+}
+
+// ══════════════════════════════════════════════
+// TABLA BASE DE DATOS
+// ══════════════════════════════════════════════
+function renderTable() {
+  const query = (document.getElementById('searchInput')?.value || '').toLowerCase();
+  const tbody = document.getElementById('tableBody');
+  const data  = query ? personas.filter(p =>
+    p.nombre.toLowerCase().includes(query) || p.dni.includes(query) || p.codigo.toLowerCase().includes(query)
+  ) : personas;
+
+  document.getElementById('cntBase').textContent   = personas.length;
+  document.getElementById('cntRegistro').textContent = personas.length;
+
+  if(data.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--text-dim);padding:30px;font-family:'Space Mono',monospace;font-size:0.72rem">
+      ${query ? 'SIN RESULTADOS' : 'SIN REGISTROS AÚN'}
+    </td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = data.map((p,i) => `
+    <tr>
+      <td style="font-family:'Space Mono',monospace;font-size:0.72rem;color:var(--text-dim)">${String(i+1).padStart(3,'0')}</td>
+      <td><img class="face-thumb" src="${p.foto}" alt="${p.nombre}"></td>
+      <td style="font-weight:600">${p.nombre}</td>
+      <td><span class="dni-display" style="font-size:0.85rem">${p.dni}</span></td>
+      <td style="font-family:'Space Mono',monospace;font-size:0.75rem">${p.codigo}</td>
+      <td><span style="font-size:0.85rem">${p.facultad || '—'}</span></td>
+      <td>
+        <span class="badge ${p.conMask?.length > 0 ? 'badge-ok' : 'badge-warn'}">
+          ${p.conMask?.length > 0 ? '✓ ' + p.conMask.length : '✗ 0'}
+        </span>
+      </td>
+      <td>
+        <span class="badge ${p.sinMask?.length > 0 ? 'badge-info' : 'badge-warn'}">
+          ${p.sinMask?.length > 0 ? '✓ ' + p.sinMask.length : '✗ 0'}
+        </span>
+      </td>
+      <td style="font-family:'Space Mono',monospace;font-size:0.65rem;color:var(--text-dim)">
+        ${new Date(p.fecha).toLocaleDateString('es-PE')}
+      </td>
+      <td>
+        <button class="btn btn-danger" style="padding:5px 10px;font-size:0.6rem"
+          onclick="eliminarPersona(${p.id})">✕</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function eliminarPersona(id) {
+  if(!confirm('¿Eliminar este registro?')) return;
+  const p = personas.find(x => x.id === id);
+  personas = personas.filter(x => x.id !== id);
+  savePersonas();
+  buildDescriptors();
+  renderTable();
+  updateStats();
+  toast(`Registro eliminado: ${p?.nombre}`, 'info');
+  log(`Eliminado: ${p?.nombre} — DNI: ${p?.dni}`, 'warn');
+}
+
+function limpiarBase() {
+  if(!confirm('¿Eliminar TODOS los registros? Esta acción no se puede deshacer.')) return;
+  personas = [];
+  savePersonas();
+  labeledDescriptors = [];
+  renderTable();
+  updateStats();
+  toast('Base de datos limpiada', 'info');
+  log('Base de datos vaciada', 'warn');
+}
+
+function exportarJSON() {
+  const blob = new Blob([JSON.stringify(personas, null, 2)], { type:'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `uni_facecheck_${Date.now()}.json`;
+  a.click();
+  log('Base exportada como JSON', 'ok');
+}
+
+// ══════════════════════════════════════════════
+// UTILS
+// ══════════════════════════════════════════════
+function savePersonas() {
+  localStorage.setItem('uni_personas', JSON.stringify(personas));
+}
+
+function updateStats() {
+  const n = personas.length;
+  document.getElementById('registradosCount').textContent = n + ' REGISTRO' + (n !== 1 ? 'S' : '');
+  document.getElementById('statTotal').textContent = n;
+  document.getElementById('cntBase').textContent   = n;
+  document.getElementById('cntRegistro').textContent = n;
+}
+
+function loadImg(src) {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload  = () => res(img);
+    img.onerror = rej;
+    img.src = src;
+  });
+}
+
+function log(msg, type='info') {
+  const box  = document.getElementById('logBox');
+  const now  = new Date();
+  const time = now.toTimeString().slice(0,8);
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = `<span class="log-time">${time}</span><span class="log-${type}">${msg}</span>`;
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+}
+
+function toast(msg, type='info') {
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = msg;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+function clearLog() {
+  document.getElementById('logBox').innerHTML = '';
+  log('Log limpiado', 'info');
+}
+</script>
+</body>
+</html>
